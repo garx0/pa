@@ -57,6 +57,7 @@ class BCH:
         self.m = gf.polydeg(self.g)
         self.k = self.n - self.m
         self.dist_ = None
+        self.time = 0
 
     def encode(self, U):
         def encode_msg(u):
@@ -73,16 +74,25 @@ class BCH:
             return _np.array(list(map(encode_msg, U)))
 
     def decode(self, W, method="euclid"):
+        from datetime import datetime
         # м-ца степеней прим. эл-та данного поля Галуа, где индекс равен степени
         pm_powsfrom0 = _np.concatenate(([1], self.pm[: -1, 1].flatten()))
+        self.time = 0
 
         def decode_msg(w):
             syndromes = gf.polyval(_lstrip0(w), self.R, pm=self.pm)
             if (syndromes == 0).all():
                 return _np.copy(w)
+
+            time_start = datetime.now()
+
             errloc_poly = decoder(w, syndromes)
+
+            time_end = datetime.now()
+            self.time += (time_end - time_start).total_seconds()
+            print(errloc_poly)
             if errloc_poly is _np.nan:
-#                 print(method, ": decoder cancel")
+                print(method, ": decoder cancel")
                 return _np.full(self.n, _np.nan)
             vals = gf.polyval(errloc_poly, pm_powsfrom0, pm=self.pm)
             roots_degs = _np.where(vals == 0)[0]
@@ -90,11 +100,11 @@ class BCH:
             v[roots_degs - 1] ^= 1
             _, r = gf.binpolydiv(_lstrip0(v), self.g)
             if not gf.isnull(r):
-#                 print(method, ": not (g | v)")
-                return _np.full(self.n, _np.nan)
+                print(method, ": not (g | v)")
+                # return _np.full(self.n, _np.nan)
             v_syndromes = gf.polyval(_lstrip0(v), self.R, pm=self.pm)
             if (v_syndromes != 0).any():
-#                 print(method, ": syndromes still != 0")
+                print(method, ": syndromes still != 0")
                 return _np.full(self.n, _np.nan)
             return v
 
@@ -119,7 +129,7 @@ class BCH:
             _, _, errloc_poly = gf.euclid(
                 gf.polyshift([1], 2 * self.t + 1),
                 s_poly,
-                pm=self.pm, max_deg=self.t)
+                pm=self.pm, max_deg=self.t + 1)
             return errloc_poly
 
         if method == "pgz":

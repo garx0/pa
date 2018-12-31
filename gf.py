@@ -1,29 +1,32 @@
 import numpy as _np
 
 __all__ = [
+'gen_pow_matrix',
+    'get_pow',
+    'get_dec',
     'add',
     'sum',
     'prod',
     'divide',
     'pow',
     'sq',
-    'euclid',
-    'gen_pow_matrix',
-    'linsolve',
-    'minpoly',
     'polyadd',
     'polyprod',
     'polydiv',
     'polyval',
-    'deg',
+    'polydeg',
     'isnull',
     'null_poly',
-    'binpolyadd'
+    'polyshift',
     'binpolyprod',
     'binpolydiv',
-    'polyshift'
+    'binpoly_arr2num',
+    'binpoly_num2arr',
     '_floorlog2',
     '_ljust0',
+    'euclid',
+    'linsolve',
+    'minpoly',
 ]
 
 _floorlog2 = lambda x: int(_np.floor(_np.log2(x))) if x != 0 else 0
@@ -71,7 +74,6 @@ def gen_pow_matrix(primpoly):
         pow_vect[i] = t
     pow_vect[pow2q - 2] = 1
     pm = _np.vstack((pow_vect.argsort() + 1, pow_vect)).T
-    pm[0, 0] = 0
     return pm
 
 get_pow = lambda p, pm: pm[p - 1, 0] if p != 0 else _np.nan
@@ -81,7 +83,7 @@ p in [0, 2**q - 1]"""
 
 get_dec = lambda d, pm: pm[d - 1, 1]
 get_dec.__doc__ = \
-"""get p in [0, 2**q - 2]: alpha**p = d
+"""get p in [1, 2**q - 1]: alpha**p = d
 d in [1, 2**q - 1]"""
 
 def add(X, Y):
@@ -91,7 +93,10 @@ def add(X, Y):
         return _np.bitwise_xor(X, Y)
 
 def sum(X, axis=0):
-    return _np.bitwise_xor.reduce(X, axis=axis)
+    # return _np.bitwise_xor.reduce(X, axis=axis)
+    shape = list(_np.array(X).shape)
+    shape[axis] = 1
+    return _np.bitwise_xor.reduce(X, axis=axis).reshape(*shape)
 
 def prod_div(X, Y, sign, pm):
     mgroup_size = len(pm)
@@ -273,7 +278,7 @@ def minpoly(x, pm):
             coef = sum(list(map(
                 lambda x: reduce(partial(prod, pm=pm), x),
                 combinations(orbit, k)
-            )))
+            ))).flatten()[0]
             if coef not in {0,1}:
                 raise Exception("programmer error")
             cur_minpoly[k] = coef
@@ -288,7 +293,7 @@ def polyval(p, x, pm):
     powers[:, 1] = x
     for d in range(2, deg + 1):
         powers[:, d] = pow(x, d, pm=pm)
-    ans = sum(prod(_np.repeat(p[::-1].reshape(1, -1), len(x), axis=0), powers, pm=pm), axis=1)
+    ans = sum(prod(_np.repeat(p[::-1].reshape(1, -1), len(x), axis=0), powers, pm=pm), axis=1).flatten()
     return ans
 
 def polyprod(p1, p2, pm):
@@ -346,12 +351,16 @@ def euclid(p1, p2, pm, max_deg=0):
         xyr_buf = deque([[[1], null_poly(), p1], [null_poly(), [1], p2]])
     else:
         xyr_buf = deque([[null_poly(), [1], p2], [[1], null_poly(), p1]])
-    x, y = xyr_buf[-1][:-1]
+    x, y, d = xyr_buf[-1]
     while True:
         q, r = polydiv(xyr_buf[0][-1], xyr_buf[1][-1], pm=pm)
-        x, y = (polyadd(xyr_buf[0][i], polyprod(xyr_buf[1][i], q, pm=pm)) for i in range(2))
-        xyr_buf.append([x, y, r])
-        xyr_buf.popleft()
-        if polydeg(r) <= max_deg:
+        # print('deg(r) =', polydeg(r), ', r =', r)
+        if isnull(r) and max_deg==0:
             break
-    return r, x, y
+        x, y = (polyadd(xyr_buf[0][i], polyprod(xyr_buf[1][i], q, pm=pm)) for i in range(2))
+        d = r
+        xyr_buf.append([x, y, d])
+        xyr_buf.popleft()
+        if polydeg(d) < max_deg:
+            break
+    return d, x, y

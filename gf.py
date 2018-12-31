@@ -18,6 +18,7 @@ __all__ = [
     'isnull',
     'null_poly',
     'polyshift',
+    'binpolyadd',
     'binpolyprod',
     'binpolydiv',
     'binpoly_arr2num',
@@ -33,7 +34,9 @@ _floorlog2 = lambda x: int(_np.floor(_np.log2(x))) if x != 0 else 0
 _floorlog2.__doc__ = "количество значимых битов в дв. записи неотрицательного числа"
 
 binpoly_arr2num = lambda arr: int("".join(map(str, arr)), base=2)
+binpoly_arr2num.__doc__ = "перевод двоичного многочлена из формата двоичного вектора в формат числа"
 binpoly_num2arr = lambda num: _np.array(list(map(int, _np.binary_repr(num))))
+binpoly_num2arr.__doc__ = "перевод двоичного многочлена из формата числа в формат двоичного вектора (np.array)"
 
 polydeg = lambda arr: len(arr) - 1
 polydeg.__doc__ = "степень многочлена (над любым полем), представленного массивом коэфф-тов"
@@ -47,20 +50,12 @@ _ljust0.__doc__ = "дополняет массив arr нулями слева �
 polyshift = lambda arr, n: _np.pad(arr, (0, n), 'constant', constant_values=0) if not isnull(arr) else arr.copy()
 polyshift.__doc__ = "умножает мн-н на x^n"
 
-def logger(f):
-    def wrapper(*args, **kwargs):
-        print(f"{f.__name__}({args}, {kwargs})")
-        res = f(*args, **kwargs)
-        print(f"-> {res}")
-        return res
-    return wrapper
-
 def gen_pow_matrix(primpoly):
     """
     использование результата:
         alpha^i = pm[i - 1, 1]
     если b in GF, b != 0:
-        j: (alpha^j = b) = pm[b - 1, 0] (j = j % mult_group_size)
+        j: (alpha^j = b) = pm[b - 1, 0] (j in [1, 2**q-1])
     """
     q = _floorlog2(primpoly)
     pow2q = 2 ** q
@@ -93,7 +88,6 @@ def add(X, Y):
         return _np.bitwise_xor(X, Y)
 
 def sum(X, axis=0):
-    # return _np.bitwise_xor.reduce(X, axis=axis)
     shape = list(_np.array(X).shape)
     shape[axis] = 1
     return _np.bitwise_xor.reduce(X, axis=axis).reshape(*shape)
@@ -324,7 +318,7 @@ def polydiv(p1, p2, pm):
     r_deg = polydeg(r)
     if r_deg < deg2:
         return null_poly(), r
-    # степень одночлена - части q, полученного на очередном шагу
+    # deg - степень одночлена - части q, полученного на очередном шагу
     deg = r_deg - deg2
     q = _np.zeros(deg + 1, dtype=int)
     for _ in range(deg + 1):
@@ -354,7 +348,6 @@ def euclid(p1, p2, pm, max_deg=0):
     x, y, d = xyr_buf[-1]
     while True:
         q, r = polydiv(xyr_buf[0][-1], xyr_buf[1][-1], pm=pm)
-        # print('deg(r) =', polydeg(r), ', r =', r)
         if isnull(r) and max_deg==0:
             break
         x, y = (polyadd(xyr_buf[0][i], polyprod(xyr_buf[1][i], q, pm=pm)) for i in range(2))

@@ -1,6 +1,8 @@
 import gf
 import numpy as _np
 
+__all__ = ['BCH']
+
 with open("primpoly.txt", "r") as f:
     primpoly_list = list(map(int, f.read().split(', ')))
 
@@ -17,7 +19,8 @@ class BCH:
         (отсортированных по двоичной записи) выбрать для поля GF.
         В качестве ref можно задать уже построенный объект BCH
         с теми же n и prim_choice, но меньшим t, чтобы облегчить
-        построение данного BCH
+        построение данного BCH (если эти условия не выполняются,
+        ref игнорируется)
         """
         if '0' in bin(n)[2:]:
             raise ValueError("invalid n")
@@ -38,7 +41,6 @@ class BCH:
             if self.t > ref.t:
                 new_roots = set(self.R) - set(ref.g_roots)
                 if new_roots:
-#                     print("binpolyprod")
                     g_rem, new_g_roots = gf.minpoly(_np.array(list(new_roots)), pm=self.pm)
                     self.g = gf.binpolyprod(ref.g, g_rem)
                     self.g_roots = _np.array(sorted(list(set(ref.g_roots) | set(new_g_roots))))
@@ -57,7 +59,6 @@ class BCH:
         self.m = gf.polydeg(self.g)
         self.k = self.n - self.m
         self.dist_ = None
-        self.time = 0
 
     def encode(self, U):
         def encode_msg(u):
@@ -74,25 +75,15 @@ class BCH:
             return _np.array(list(map(encode_msg, U)))
 
     def decode(self, W, method="euclid"):
-        from datetime import datetime
         # м-ца степеней прим. эл-та данного поля Галуа, где индекс равен степени
         pm_powsfrom0 = _np.concatenate(([1], self.pm[: -1, 1].flatten()))
-        self.time = 0
 
         def decode_msg(w):
             syndromes = gf.polyval(_lstrip0(w), self.R, pm=self.pm)
             if (syndromes == 0).all():
                 return _np.copy(w)
-
-            time_start = datetime.now()
-
             errloc_poly = decoder(w, syndromes)
-
-            time_end = datetime.now()
-            self.time += (time_end - time_start).total_seconds()
-            print(errloc_poly)
             if errloc_poly is _np.nan:
-                print(method, ": decoder cancel")
                 return _np.full(self.n, _np.nan)
             vals = gf.polyval(errloc_poly, pm_powsfrom0, pm=self.pm)
             roots_degs = _np.where(vals == 0)[0]
@@ -100,11 +91,9 @@ class BCH:
             v[roots_degs - 1] ^= 1
             _, r = gf.binpolydiv(_lstrip0(v), self.g)
             if not gf.isnull(r):
-                print(method, ": not (g | v)")
-                # return _np.full(self.n, _np.nan)
+                return _np.full(self.n, _np.nan)
             v_syndromes = gf.polyval(_lstrip0(v), self.R, pm=self.pm)
             if (v_syndromes != 0).any():
-                print(method, ": syndromes still != 0")
                 return _np.full(self.n, _np.nan)
             return v
 
@@ -119,8 +108,6 @@ class BCH:
                 A = A[: -1, : -1]
             else:
                 return _np.nan
-            if sol[0] == 0:
-                print("sol[0]==0")
             errloc_poly = _lstrip0(_np.concatenate((sol, [1])))
             return errloc_poly
 
@@ -160,5 +147,5 @@ class BCH:
                 min_norm = norm
         self.dist_ = min_norm
         if self.dist_ < self.t * 2 + 1:
-            print("programmer error")
+            raise Exception("programmer error")
         return self.dist_
